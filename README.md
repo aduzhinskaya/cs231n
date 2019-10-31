@@ -1,0 +1,2 @@
+# Using Google Colaboratory Environment
+This repository will contain my solutions to the assignments of Stanford's [CS231n course (Convolutional Neural Networks for Visual Recognition)](https://cs231n.github.io)
