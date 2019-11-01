@@ -76,8 +76,10 @@ class KNearestNeighbor(object):
                 # not use a loop over dimension, nor use np.linalg.norm().          #
                 #####################################################################
                 # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-                pass
+                
+                p1 = X[i]
+                p2 = self.X_train[j]
+                dists [i, j] = np.sqrt(np.sum(np.square(p1 - p2)))
 
                 # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         return dists
@@ -101,7 +103,12 @@ class KNearestNeighbor(object):
             #######################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-            pass
+            #broadcasring [5000x3027] and 
+            #                  [3027] <- read left to right
+
+            diff = np.subtract(self.X_train, X[i]) # [5000x3027]
+            summ = np.sum(np.square(diff), axis=1) # [5000,]
+            dists[i, :] = np.sqrt(summ)
 
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         return dists
@@ -131,7 +138,12 @@ class KNearestNeighbor(object):
         #########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        a = np.sum(np.square(X), axis=1)                   # [500]
+        a = a[:, np.newaxis]                               # [500,   1]
+        b = np.sum(np.square(self.X_train), axis=1)        #      5000]
+        ab = np.matmul(X, np.transpose(self.X_train))      # [500x5000]
+
+        dists = np.sqrt(a - 2*ab + b)                      # [500x5000]
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         return dists
@@ -164,7 +176,9 @@ class KNearestNeighbor(object):
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-            pass
+            # indexes of sorted asc L2 distances
+            indx = np.argsort(dists[i])[:k] 
+            closest_y = self.y_train[indx]
 
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
             #########################################################################
@@ -176,7 +190,10 @@ class KNearestNeighbor(object):
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-            pass
+            label, votes = np.unique(closest_y, return_counts=True)
+            d = dict(zip(label, votes))
+
+            y_pred[i] = sorted(d, key=d.get, reverse=True)[0]
 
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
