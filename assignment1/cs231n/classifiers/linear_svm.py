@@ -28,14 +28,24 @@ def svm_loss_naive(W, X, y, reg):
     num_train = X.shape[0]
     loss = 0.0
     for i in range(num_train):
-        scores = X[i].dot(W)
+        scores = X[i].dot(W) # [D, ] [DxC] = [C, ]
         correct_class_score = scores[y[i]]
         for j in range(num_classes):
             if j == y[i]:
                 continue
-            margin = scores[j] - correct_class_score + 1 # note delta = 1
+            margin = scores[j] + 1 - correct_class_score # note delta = 1
             if margin > 0:
                 loss += margin
+                # There are two dependency chains for dl/dW
+
+                # dl/dW = dl/d_margin * d_margin/d_scores[j] * d_scores[j]/dW 
+                #       + dl/d_margin * d_margin/scores[y[i]] * scores[y[i]]/dW 
+
+                # dl/dW = 1 * 1 * d_scores[j]/dW 
+                #       + 1 * (-1) * scores[y[i]]/dW 
+
+                dW[:, j] += X[i]
+                dW[:, y[i]] -= X[i]
 
     # Right now the loss is a sum over all training examples, but we want it
     # to be an average instead so we divide by num_train.
@@ -43,6 +53,7 @@ def svm_loss_naive(W, X, y, reg):
 
     # Add regularization to the loss.
     loss += reg * np.sum(W * W)
+    
 
     #############################################################################
     # TODO:                                                                     #
@@ -54,7 +65,13 @@ def svm_loss_naive(W, X, y, reg):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    # Hinge loss part
+    dW = dW / num_train
+
+    # Regularization part
+    df = reg * 1        # f = reg * x
+    df = 1 * df         # f = np.sum(x)
+    dW += 2*W * df      # f =  W * W
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     
@@ -78,7 +95,20 @@ def svm_loss_vectorized(W, X, y, reg):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    scores = np.matmul(X, W)   #(N, C)
+    
+    num_samples = X.shape[0]
+    all_ = np.arange(num_samples)
+    correct_scores = scores[all_, y]
+
+    margins = 1 + scores - correct_scores[:, np.newaxis]
+    margins[all_, y] = 0
+
+    # Hinge loss
+    loss += np.sum(np.maximum(margins, 0)) / num_samples
+
+    # Regularization
+    loss += reg * np.sum(W * W)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -93,8 +123,19 @@ def svm_loss_vectorized(W, X, y, reg):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    
+    # Add scores with positive margins
+    margin_mask = (margins > 0).astype(int)                 #(N, C) 
 
-    # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    # Substruct correct score for each positive margin
+    # margin_mask[i] = [0, 1, 1, 1, -3, 0, 0, ...]
+    margin_mask[all_, y] = -np.sum(margin_mask, axis=1)
+    
+    for i in all_:
+        dW += np.outer(X[i], margin_mask[i])
+    dW /= num_samples
+
+    # Regularization: Grads
+    dW += 2 * reg * W
 
     return loss, dW
