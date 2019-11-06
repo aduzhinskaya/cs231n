@@ -125,14 +125,17 @@ def svm_loss_vectorized(W, X, y, reg):
 
     
     # Add scores with positive margins
-    margin_mask = (margins > 0).astype(int)                 #(N, C) 
+    margin_coef = (margins > 0).astype(int)                 #(N, C) 
 
     # Substruct correct score for each positive margin
     # margin_mask[i] = [0, 1, 1, 1, -3, 0, 0, ...]
-    margin_mask[all_, y] = -np.sum(margin_mask, axis=1)
+    margin_coef[all_, y] = -np.sum(margin_coef, axis=1)
     
-    for i in all_:
-        dW += np.outer(X[i], margin_mask[i])
+    # Sum of outer products is equivalet to matmul
+    ## for i in all_:
+    ##    dW += np.outer(X[i], margin_coef[i])
+    dW += np.matmul(X.T, margin_coef)
+
     dW /= num_samples
 
     # Regularization: Grads
