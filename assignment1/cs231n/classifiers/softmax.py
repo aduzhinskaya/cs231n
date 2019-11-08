@@ -4,7 +4,7 @@ from random import shuffle
 from past.builtins import xrange
 
 
-class Softmax_Op(object):
+class Softmax(object):
 
     def __call__(self, x):
         """
@@ -13,8 +13,8 @@ class Softmax_Op(object):
         Inputs:
         - X: A numpy array of shape (N, ) containing N class scores of 1 datapoint.
         """
-        self.n = x.shape[0]
         self.x = x
+        self.n = x.shape[0]
 
         # For numerical stability of softmax
         x = x - np.max(x)
@@ -28,7 +28,7 @@ class Softmax_Op(object):
         return self.f
     
 
-    def backprop(self, grad):
+    def backward(self, grad):
         """Analitical gradient of Softmax"""
 
         # Kronecker delta
@@ -36,12 +36,67 @@ class Softmax_Op(object):
 
         local = self.f[:, None] * (I - self.f)
 
-        return  np.matmul(local, grad)
+        return  np.matmul(local, grad).squeeze()
 
 
-class Softmax_Jacob(Softmax_Op):
+class VecSoftmax(Softmax):
 
-    def backprop(self, grad):
+    def __call__(self, x):
+        
+        """
+        Softmax operation is a vector function: (N, ) -> (N, )
+
+        Inputs:
+        - X: A numpy array of shape (N, C) containing N vectors with C scores.
+
+        Returns:
+        - f = softmax(X). A numpy array of size (N, C)
+        """
+        
+        if x.ndim == 1:
+            x = x[None, :]
+        
+        self.x_shape = x.shape
+
+        # For numerical stability of softmax
+        x -= x.max(axis=1, keepdims=True)
+
+        # Calculate Softmax and store intermediates to use later in backprob
+        self.f1 = np.exp(x)                     
+        self.f2 = self.f1.sum(axis=1, keepdims=True)       
+        self.f = self.f1 / self.f2              
+
+        # fn:  (in_dims) -> (out_dims) 
+        # f1:  (N, 1) -> (N, 1)
+        # f2:  (N, 1) -> (1, 1)
+        # f3:  (N, 1) and (1, 1) -> (N, 1)
+
+        return self.f.squeeze()    
+    
+    def backward(self, grad_in):
+
+        """
+        Analitical gradient of Softmax
+        """
+
+        n = self.x_shape[0]
+        c = self.x_shape[1]
+
+        # Kronecker delta. 1(i=j)
+        I = np.zeros((n, c, c))
+        di = (slice(n), range(c), range(c))
+        I[di] = 1
+        
+        grad_local = self.f[:, :, None] * (I - self.f[:, None, :])
+
+        grad_out = np.matmul(grad_local, grad_in[:, :, None])
+
+        return grad_out.squeeze()
+
+
+class JacobSoftmax(Softmax):
+
+    def backward(self, grad):
         """
         Backpropagation along Softmax computational graph using chain rule.
         Full Jacobian matrixes are composed in this implementation
@@ -53,7 +108,7 @@ class Softmax_Jacob(Softmax_Op):
         Softmax output
 
         Returns:
-        - Gradient wrt Softmax input X.
+        - Gradient wrt input X.
         """ 
 
         # Softmax computational graph:
@@ -78,20 +133,7 @@ class Softmax_Jacob(Softmax_Op):
         df1 += np.matmul(df3_f1.T, df3)    # (N, 1) = (N, N).T * (N, 1)
         dX = np.matmul(df1_x.T, df1)       # (N, 1) = (N, N).T * (N, 1)
 
-        # print('x', self.x)
-        # print('f1', self.f1)
-        # print('f2', self.f2)
-        # print('f', self.f)
-        # print('df3_f1', df3_f1)
-        # print('df3_f2', df3_f2)
-        # print('df2_f1', df2_f1)
-        # print('df1_x', df1_x)
-        # print('df2 CORRECT', df2)
-        # print('df12 CORRECT', np.matmul(df2_f1.T, df2))
-        # print('df13 CORRECT', np.matmul(df3_f1.T, df3))
-        # print('df1 CORRECT', df1)
-
-        return dX.flatten()
+        return dX.squeeze()
 
 
 def softmax_loss_naive(W, X, y, reg):
@@ -129,26 +171,26 @@ def softmax_loss_naive(W, X, y, reg):
         scores = np.matmul(X[i], W)  
 
         # softmax
-        softmax_op = Softmax_Op()
-        pred_prob = softmax_op(scores)
+        softmax = JacobSoftmax()
+        pred_prob = softmax(scores)
 
         # cross-entropy loss
         loss -= np.log(pred_prob[y[i]])
-        d_softmax_i = -1/pred_prob[y[i]] 
+        dsoftmax_i = -1/pred_prob[y[i]] 
         
-        d_softmax = np.zeros_like(scores)
-        d_softmax[y[i]] = d_softmax_i
+        dsoftmax = np.zeros_like(scores)
+        dsoftmax[y[i]] = dsoftmax_i
 
-        d_scores = softmax_op.backprop(d_softmax)
+        dscores = softmax.backward(dsoftmax)
 
-        dW += np.outer(X[i], d_scores)
+        dW += np.outer(X[i], dscores)
 
     loss /= num_train
     dW /= num_train
     
     # L2 regularization
-    loss += reg * np.sum(W * W)
-    dW += reg * 2 * W
+    loss += reg * np.sum(W**2)
+    dW += reg * 2*W
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -173,23 +215,32 @@ def softmax_loss_vectorized(W, X, y, reg):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    scores = np.matmul(X, W)        #(N, C)
+    num_train = X.shape[0]
+    num_classes = W.shape[1]
+
+    scores = np.matmul(X, W)        
 
     # softmax
-    softmax_op = Softmax_Op()
-    pred_prob = softmax_op(scores)
+    softmax = VecSoftmax()
+    pred_prob = softmax(scores) + 1e-15    
+
+    one_hot_y = np.eye(num_classes)[y]
 
     # cross-entropy loss
-    loss -= np.log(pred_prob[y[i]])
-    d_softmax_i = -1/pred_prob[y[i]] 
-    
-    d_softmax = np.zeros_like(scores)
-    d_softmax[y[i]] = d_softmax_i
+    cross_entropy_loss = -np.sum(one_hot_y * np.log(pred_prob))
+    cross_entropy_loss /= num_train
 
-    d_scores = softmax_op.backprop(d_softmax)
+    # L2 regularizarion
+    reg_loss = reg * np.sum(W**2)
 
-    dW += np.outer(X[i], d_scores)
+    loss = cross_entropy_loss + reg_loss
 
+    dloss = 1/num_train
+    dsoftmax = -one_hot_y/pred_prob * dloss
+    dscores = softmax.backward(dsoftmax) 
+
+    dW += reg * 2*W
+    dW += np.matmul(X.T, dscores)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
