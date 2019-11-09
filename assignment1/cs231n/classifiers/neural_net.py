@@ -5,6 +5,7 @@ from builtins import object
 import numpy as np
 import matplotlib.pyplot as plt
 from past.builtins import xrange
+from .softmax import VecSoftmax
 
 class TwoLayerNet(object):
     """
@@ -70,6 +71,7 @@ class TwoLayerNet(object):
         W1, b1 = self.params['W1'], self.params['b1']
         W2, b2 = self.params['W2'], self.params['b2']
         N, D = X.shape
+        C = b2.shape[0]
 
         # Compute the forward pass
         scores = None
@@ -80,7 +82,9 @@ class TwoLayerNet(object):
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        fc1 = np.matmul(X, W1) + b1 
+        relu1 = np.maximum(fc1, 0)
+        scores = np.matmul(relu1, W2) + b2
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -98,7 +102,16 @@ class TwoLayerNet(object):
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        softmax = VecSoftmax()
+        y_prob = softmax(scores)
+        y_one_hot = np.eye((C))[y]
+
+        cross_entropy = -np.sum(y_one_hot * np.log(y_prob))
+        cross_entropy /= N
+
+        w_L2 = np.sum(W1**2) + np.sum(W2**2)
+
+        loss = cross_entropy + reg * w_L2
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -111,7 +124,20 @@ class TwoLayerNet(object):
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        dcross_entropy = 1/N
+        dy_prob = - y_one_hot / y_prob * dcross_entropy
+        dscores = softmax.backward(dy_prob) 
+ 
+        grads['W2'] = np.matmul(relu1.T, dscores)
+        grads['W2'] += reg * 2*W2
+        grads['b2'] = np.matmul(dscores.T, np.ones(N))
+
+        drelu1 = np.matmul(dscores, W2.T)
+        dfc1 = drelu1 * (fc1 > 0)
+
+        grads['W1'] = np.matmul(X.T, dfc1)
+        grads['W1'] += reg * 2*W1
+        grads['b1'] = np.matmul(dfc1.T, np.ones((N)))
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -156,7 +182,9 @@ class TwoLayerNet(object):
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-            pass
+            idxs = np.random.randint(0, num_train, batch_size)
+            X_batch = X[idxs]
+            y_batch = y[idxs]
 
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -172,7 +200,8 @@ class TwoLayerNet(object):
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-            pass
+            for name in self.params:
+                self.params[name] -= learning_rate * grads[name]
 
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -218,7 +247,7 @@ class TwoLayerNet(object):
         ###########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        y_pred = np.argmax(self.loss(X), axis=1)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
