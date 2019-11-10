@@ -40,9 +40,9 @@ class TwoLayerNet(object):
         """
         self.params = {}
         self.params['W1'] = std * np.random.randn(input_size, hidden_size)
-        self.params['b1'] = np.zeros(hidden_size)
         self.params['W2'] = std * np.random.randn(hidden_size, output_size)
-        self.params['b2'] = np.zeros(output_size)
+        self.params['b1'] = np.zeros((hidden_size))
+        self.params['b2'] = np.zeros((output_size))
 
     def loss(self, X, y=None, reg=0.0):
         """
@@ -126,6 +126,7 @@ class TwoLayerNet(object):
 
         dcross_entropy = 1/N
         dy_prob = - y_one_hot / y_prob * dcross_entropy
+
         dscores = softmax.backward(dy_prob) 
  
         grads['W2'] = np.matmul(relu1.T, dscores)
@@ -133,6 +134,7 @@ class TwoLayerNet(object):
         grads['b2'] = np.matmul(dscores.T, np.ones(N))
 
         drelu1 = np.matmul(dscores, W2.T)
+
         dfc1 = drelu1 * (fc1 > 0)
 
         grads['W1'] = np.matmul(X.T, dfc1)
@@ -206,7 +208,8 @@ class TwoLayerNet(object):
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
             if verbose and it % 100 == 0:
-                print('iteration %d / %d: loss %f' % (it, num_iters, loss))
+                print('iteration %d / %d: loss %f, learning_rate %f' % 
+                        (it, num_iters, loss, learning_rate))
 
             # Every epoch, check train and val accuracy and decay learning rate.
             if it % iterations_per_epoch == 0:
