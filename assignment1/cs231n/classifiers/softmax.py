@@ -25,6 +25,9 @@ class Softmax(object):
 
         self.f = self.f1 / self.f2              # f3:f1(N, 1) -> (N, 1)
                                                 #    f2(1, 1) -> (N, 1)
+        # Add small number to prevent underflow in log(softmax)
+        self.f += 1e-15 
+
         return self.f
     
 
@@ -71,6 +74,9 @@ class VecSoftmax(Softmax):
         # f2:  (N, 1) -> (1, 1)
         # f3:  (N, 1) and (1, 1) -> (N, 1)
 
+        # Add small number to prevent underflow
+        self.f += 1e-15
+        
         return self.f.squeeze()    
     
     def backward(self, grad_in):
