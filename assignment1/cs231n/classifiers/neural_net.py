@@ -173,6 +173,7 @@ class TwoLayerNet(object):
         loss_history = []
         train_acc_history = []
         val_acc_history = []
+        val_loss_history = []
 
         for it in range(num_iters):
             X_batch = None
@@ -218,6 +219,7 @@ class TwoLayerNet(object):
                 val_acc = (self.predict(X_val) == y_val).mean()
                 train_acc_history.append(train_acc)
                 val_acc_history.append(val_acc)
+                val_loss_history.append(self.loss(X_val, y_val)[0])
 
                 # Decay learning rate
                 learning_rate *= learning_rate_decay
@@ -226,6 +228,7 @@ class TwoLayerNet(object):
           'loss_history': loss_history,
           'train_acc_history': train_acc_history,
           'val_acc_history': val_acc_history,
+          'val_loss_history': val_loss_history
         }
 
     def predict(self, X):
