@@ -49,7 +49,10 @@ class TwoLayerNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        self.params['W1'] = np.random.randn(input_dim, hidden_dim) * weight_scale
+        self.params['b1'] = np.zeros(hidden_dim)
+        self.params['W2'] = np.random.randn(hidden_dim, num_classes) * weight_scale
+        self.params['b2'] = np.zeros(num_classes)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -82,8 +85,14 @@ class TwoLayerNet(object):
         # class scores for X and storing them in the scores variable.              #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        w1 = self.params['W1']
+        w2 = self.params['W2']
 
-        pass
+        fc1, cache_fc1 = affine_forward(X, w1, self.params['b1']) 
+        relu1, cache_relu1 = relu_forward(fc1)
+        fc2, cache_fc2 = affine_forward(relu1, w2, self.params['b2'])
+
+        scores = fc2
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -106,8 +115,25 @@ class TwoLayerNet(object):
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        loss, dscores = softmax_loss(scores, y)
 
-        pass
+        l2_penalty = np.linalg.norm(w1) ** 2 + np.linalg.norm(w2) ** 2
+        loss += 0.5 * self.reg * l2_penalty
+
+        # L2 gradients
+        grads['W1'] = self.reg * w1
+        grads['W2'] = self.reg * w2
+
+        dx, dw, db = affine_backward(dscores, cache_fc2)
+        grads['b2'] = db
+        grads['W2'] += dw
+
+        dx = relu_backward(dx, cache_relu1)
+        
+        dx, dw, db = affine_backward(dx, cache_fc1)
+        grads['b1'] = db
+        grads['W1'] += dw
+
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
