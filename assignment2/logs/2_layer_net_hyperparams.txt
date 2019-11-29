@@ -105,3 +105,4 @@ H 150, lr_decay 0.950000, learn_rate 1.000000e-03, reg 3.000000e-02, val: 0.5440
 H 150, lr_decay 0.950000, learn_rate 1.000000e-03, reg 3.000000e-02, val: 0.544000
 H 150, lr_decay 0.950000, learn_rate 1.000000e-03, reg 3.000000e-02, val: 0.538000
 H 150, lr_decay 0.950000, learn_rate 1.000000e-03, reg 3.000000e-02, val: 0.530000
+val: 0.525 {'lr': 0.0009466160353582563, 'reg': 0.09519389128530127, 'lr_decay': 0.95, 'update_rule': 'sdg', 'hidden_dim': 150, 'weight_scale': 0.001}

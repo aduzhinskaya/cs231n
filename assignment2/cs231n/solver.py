@@ -281,9 +281,9 @@ class Solver(object):
                 print('(Iteration %d / %d) loss: %f' % (
                        t + 1, num_iterations, self.loss_history[-1]))
             # Log to tensorboard
-            if self.tb_writer and t % iterations_per_epoch / 20 == 0:
+            if self.tb_writer and t % (iterations_per_epoch / 20) == 0:
                 with self.tb_writer.as_default():
-                    tf.summary.scalar('train_loss', self.loss_history[-1], step=t)
+                    tf.summary.scalar('train/loss', self.loss_history[-1], step=t)
 
             # At the end of every epoch, increment the epoch counter and decay
             # the learning rate.
@@ -311,10 +311,9 @@ class Solver(object):
                            self.epoch, self.num_epochs, train_acc, val_acc))
                 if self.tb_writer:
                     with self.tb_writer.as_default():
-                        tf.summary.scalar('train_accuracy', train_acc, step=self.epoch)
                         lr = next(iter(self.optim_configs.values()))['learning_rate']
-                        tf.summary.scalar('learning_rate', lr, step=self.epoch)
-                        tf.summary.scalar('val_accuracy', val_acc, step=self.epoch)
+                        tf.summary.scalar('train/_learning_rate', lr, step=t)
+                        tf.summary.scalar('valid/accuracy', val_acc, step=t)
 
                 # Keep track of the best model
                 if val_acc > self.best_val_acc:
