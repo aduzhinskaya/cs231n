@@ -204,7 +204,15 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        for i in range(self.num_layers):
+            dim_in = hidden_dims[i - 1] if i > 0 else input_dim
+            dim_out = hidden_dims[i] if i < len(hidden_dims) else num_classes
+
+            w_name = self._param_name('W', i + 1)
+            b_name = self._param_name('b', i + 1)
+            self.params[w_name] = np.random.randn(dim_in, dim_out) * weight_scale
+            self.params[b_name] = np.zeros(dim_out)
+
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -234,7 +242,9 @@ class FullyConnectedNet(object):
         # Cast all parameters to the correct datatype
         for k, v in self.params.items():
             self.params[k] = v.astype(dtype)
-
+    
+    def _param_name(self, c, i):
+        return '%c%i'% (c, i)
 
     def loss(self, X, y=None):
         """
@@ -267,7 +277,15 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        fc_cache = []
+        out = X
+        for i in range(1, self.num_layers + 1):
+            w = self.params[self._param_name('W', i)]
+            b = self.params[self._param_name('b', i)]
+            out, cache = affine_relu_forward(out, w, b)
+            fc_cache.append(cache)
+
+        scores = out
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -294,7 +312,24 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        loss, dx = softmax_loss(scores, y)
+        l2_penalty = 0
+        for i in range(1, self.num_layers + 1):
+            w = self.params[self._param_name('W', i)]
+            l2_penalty += np.linalg.norm(w) ** 2
+
+        loss += 0.5 * self.reg * l2_penalty
+
+        for i, cache in reversed(list(enumerate(fc_cache))):
+            dx, dw, db = affine_relu_backward(dx, cache)
+            grads[self._param_name('b', i + 1)] = db
+            grads[self._param_name('W', i + 1)] = dw
+
+        # set dloss_dw from L2 penalty pass
+        for i in range(1, self.num_layers + 1):
+            name = self._param_name('W', i)
+            w = self.params[name]
+            grads[name] += self.reg * w 
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
