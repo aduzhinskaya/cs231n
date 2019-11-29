@@ -138,17 +138,11 @@ class Solver(object):
         self.print_every = kwargs.pop('print_every', 10)
         self.verbose = kwargs.pop('verbose', True)
 
-        self.use_tensorboard = False
-        log_dir = kwargs.pop('tensorboard_logdir', None)
-        if log_dir:
-            self.use_tensorboard = True
-            params_list = '{}/{}/lr_decay {}'.format(
-                self.update_rule, self.optim_config, self.lr_decay
-            )
-            train_log_dir = os.path.join(log_dir, 'train', params_list)
-            val_log_dir = os.path.join(log_dir, 'test', params_list,)
-            self.train_summary_writer = summary.create_file_writer(train_log_dir)
-            self.val_summary_writer = summary.create_file_writer(val_log_dir)
+        self.tb_writer = None
+        tb_label = kwargs.pop('tensorboard_logdir', None)
+        if tb_label:
+            log_dir = os.path.join('logs/tensorboard/', tb_label)
+            self.tb_writer = summary.create_file_writer(log_dir)
 
         # Throw an error if there are extra keyword arguments
         if len(kwargs) > 0:
@@ -287,9 +281,9 @@ class Solver(object):
                 print('(Iteration %d / %d) loss: %f' % (
                        t + 1, num_iterations, self.loss_history[-1]))
             # Log to tensorboard
-            if self.use_tensorboard and t % iterations_per_epoch / 5 == 0:
-                with self.train_summary_writer.as_default():
-                    tf.summary.scalar('loss', self.loss_history[-1], step=t)
+            if self.tb_writer and t % iterations_per_epoch / 20 == 0:
+                with self.tb_writer.as_default():
+                    tf.summary.scalar('train_loss', self.loss_history[-1], step=t)
 
             # At the end of every epoch, increment the epoch counter and decay
             # the learning rate.
@@ -315,13 +309,12 @@ class Solver(object):
                 if self.verbose:
                     print('(Epoch %d / %d) train acc: %f; val_acc: %f' % (
                            self.epoch, self.num_epochs, train_acc, val_acc))
-                if self.use_tensorboard:
-                    with self.train_summary_writer.as_default():
-                        tf.summary.scalar('accuracy', train_acc, step=self.epoch)
+                if self.tb_writer:
+                    with self.tb_writer.as_default():
+                        tf.summary.scalar('train_accuracy', train_acc, step=self.epoch)
                         lr = next(iter(self.optim_configs.values()))['learning_rate']
                         tf.summary.scalar('learning_rate', lr, step=self.epoch)
-                    with self.val_summary_writer.as_default():
-                        tf.summary.scalar('accuracy', val_acc, step=self.epoch)
+                        tf.summary.scalar('val_accuracy', val_acc, step=self.epoch)
 
                 # Keep track of the best model
                 if val_acc > self.best_val_acc:
