@@ -7,6 +7,8 @@ import os
 import pickle as pickle
 
 import numpy as np
+from tensorflow import summary
+import tensorflow as tf
 
 from cs231n import optim
 
@@ -113,6 +115,9 @@ class Solver(object):
           accuracy; default is None, which uses the entire validation set.
         - checkpoint_name: If not None, then save model checkpoints here every
           epoch.
+        - tensorboard_logdir: Tensorboard log dir for various training statistics such 
+          as loss, accuracy, gradient norm, etc Expected value is 
+          'logs/tensorboard/{model_name}'
         """
         self.model = model
         self.X_train = data['X_train']
@@ -132,6 +137,18 @@ class Solver(object):
         self.checkpoint_name = kwargs.pop('checkpoint_name', None)
         self.print_every = kwargs.pop('print_every', 10)
         self.verbose = kwargs.pop('verbose', True)
+
+        self.use_tensorboard = False
+        log_dir = kwargs.pop('tensorboard_logdir', None)
+        if log_dir:
+            self.use_tensorboard = True
+            params_list = '{}/{}/lr_decay {}'.format(
+                self.update_rule, self.optim_config, self.lr_decay
+            )
+            train_log_dir = os.path.join(log_dir, 'train', params_list)
+            val_log_dir = os.path.join(log_dir, 'test', params_list,)
+            self.train_summary_writer = summary.create_file_writer(train_log_dir)
+            self.val_summary_writer = summary.create_file_writer(val_log_dir)
 
         # Throw an error if there are extra keyword arguments
         if len(kwargs) > 0:
@@ -269,6 +286,10 @@ class Solver(object):
             if self.verbose and t % self.print_every == 0:
                 print('(Iteration %d / %d) loss: %f' % (
                        t + 1, num_iterations, self.loss_history[-1]))
+            # Log to tensorboard
+            if self.use_tensorboard and t % iterations_per_epoch / 5 == 0:
+                with self.train_summary_writer.as_default():
+                    tf.summary.scalar('loss', self.loss_history[-1], step=t)
 
             # At the end of every epoch, increment the epoch counter and decay
             # the learning rate.
@@ -294,6 +315,13 @@ class Solver(object):
                 if self.verbose:
                     print('(Epoch %d / %d) train acc: %f; val_acc: %f' % (
                            self.epoch, self.num_epochs, train_acc, val_acc))
+                if self.use_tensorboard:
+                    with self.train_summary_writer.as_default():
+                        tf.summary.scalar('accuracy', train_acc, step=self.epoch)
+                        lr = next(iter(self.optim_configs.values()))['learning_rate']
+                        tf.summary.scalar('learning_rate', lr, step=self.epoch)
+                    with self.val_summary_writer.as_default():
+                        tf.summary.scalar('accuracy', val_acc, step=self.epoch)
 
                 # Keep track of the best model
                 if val_acc > self.best_val_acc:
