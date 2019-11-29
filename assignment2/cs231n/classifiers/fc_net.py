@@ -282,7 +282,13 @@ class FullyConnectedNet(object):
         for i in range(1, self.num_layers + 1):
             w = self.params[self._param_name('W', i)]
             b = self.params[self._param_name('b', i)]
-            out, cache = affine_relu_forward(out, w, b)
+
+            # Relu for all exept last layer
+            if i < self.num_layers:
+                out, cache = affine_relu_forward(out, w, b)
+            else:
+                out, cache = affine_forward(out, w, b)
+
             fc_cache.append(cache)
 
         scores = out
@@ -321,7 +327,10 @@ class FullyConnectedNet(object):
         loss += 0.5 * self.reg * l2_penalty
 
         for i, cache in reversed(list(enumerate(fc_cache))):
-            dx, dw, db = affine_relu_backward(dx, cache)
+            if i + 1 == self.num_layers:
+                dx, dw, db = affine_backward(dx, cache)
+            else:
+                dx, dw, db = affine_relu_backward(dx, cache)
             grads[self._param_name('b', i + 1)] = db
             grads[self._param_name('W', i + 1)] = dw
 
