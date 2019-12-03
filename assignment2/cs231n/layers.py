@@ -144,7 +144,7 @@ def batchnorm_forward(x, gamma, beta, bn_param):
     During training we also keep an exponentially decaying running mean of the
     mean and variance of each feature, and these averages are used to normalize
     data at test-time.
-
+ 
     At each timestep we update the running averages for mean and variance using
     an exponential decay based on the momentum parameter:
 
@@ -176,12 +176,23 @@ def batchnorm_forward(x, gamma, beta, bn_param):
     mode = bn_param['mode']
     eps = bn_param.get('eps', 1e-5)
     momentum = bn_param.get('momentum', 0.9)
+    t = bn_param.get('t', 1)
 
     N, D = x.shape
     running_mean = bn_param.get('running_mean', np.zeros(D, dtype=x.dtype))
     running_var = bn_param.get('running_var', np.zeros(D, dtype=x.dtype))
 
-    out, cache = None, None
+    out, cache = None, {}
+    
+    # cache['x'] = x
+    # cache['momentum'] = momentum
+    # cache['running_mean'] = running_mean
+    # cache['running_var'] = running_var
+    # cache['eps'] = eps
+    # cache['gamma'] = gamma
+    # cache['beta'] = beta
+    # cache['t'] = t
+
     if mode == 'train':
         #######################################################################
         # TODO: Implement the training-time forward pass for batch norm.      #
@@ -205,8 +216,23 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         # might prove to be helpful.                                          #
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        
+        sample_mean = x.mean(axis=0) # (D,)
+        sample_var = x.var(axis=0)   # (D,)
 
-        pass
+        running_mean = momentum * running_mean + (1 - momentum) * sample_mean
+        running_var = momentum * running_var + (1 - momentum) * sample_var
+
+        # Bias correction for small t when cache is near zero
+        corr =  (1 - momentum**t)
+    
+        x = (x - running_mean / corr) / np.sqrt(running_var / corr + eps)
+
+        # Allow network to learn Identity BN when needed
+        # gamma and beta are specific for each feature
+        out = (x * gamma) + beta
+
+        t +=1
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         #######################################################################
@@ -221,7 +247,11 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        corr =  (1 - momentum**t)
+
+        x = (x - running_mean / corr) / np.sqrt(running_var / corr + eps)
+
+        out = x * gamma + beta
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         #######################################################################
@@ -229,10 +259,11 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         #######################################################################
     else:
         raise ValueError('Invalid forward batchnorm mode "%s"' % mode)
-
+    
     # Store the updated running means back into bn_param
     bn_param['running_mean'] = running_mean
     bn_param['running_var'] = running_var
+    bn_param['t'] = t
 
     return out, cache
 
@@ -262,8 +293,21 @@ def batchnorm_backward(dout, cache):
     # might prove to be helpful.                                              #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    dbeta = dout.sum(axis=0)
 
-    pass
+    # dgamma = cache['x1'].T @ dout              # N, D
+    # dx1 = dout * cache['gamma']                # N, D
+
+    # dx = dx1 * cache['coef_x1']       # N, D (1) x1 = f(x)
+    # drunning_mean1 = (dout * - cache['corr'] / cache['coef_x1']).sum(axis=0) # D, 1 ?
+    # dsample_mean = (1 - cache['momentum']) * drunning_mean1 # D, 1
+    # dx += dsample_mean / cache['x'].shape[0]
+
+    # drunning_var1 = (cache['x'] - cache['running_mean1'] / cache['corr']) * -0.5 
+    # drunning_var1 *= np.power(cache['running_var1'] / cache['corr'] + cache['eps'], -1.5)
+    # drunning_var1 *= 1/cache['corr']
+    # drunning_var1 = drunning_var1.sum(axis=0) # D, 1 ?
+
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
