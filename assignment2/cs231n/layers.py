@@ -184,14 +184,11 @@ def batchnorm_forward(x, gamma, beta, bn_param):
 
     out, cache = None, {}
     
-    # cache['x'] = x
-    # cache['momentum'] = momentum
-    # cache['running_mean'] = running_mean
-    # cache['running_var'] = running_var
-    # cache['eps'] = eps
-    # cache['gamma'] = gamma
-    # cache['beta'] = beta
-    # cache['t'] = t
+    cache['x'] = x
+    cache['momentum'] = momentum
+    cache['eps'] = eps
+    cache['gamma'] = gamma
+    cache['beta'] = beta
 
     if mode == 'train':
         #######################################################################
@@ -218,15 +215,20 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         
         sample_mean = x.mean(axis=0) # (D,)
+        cache['sample_mean'] = sample_mean
         sample_var = x.var(axis=0)   # (D,)
 
         running_mean = momentum * running_mean + (1 - momentum) * sample_mean
         running_var = momentum * running_var + (1 - momentum) * sample_var
+        cache['running_var'] = running_var
+        cache['running_mean'] = running_mean
 
         # Bias correction for small t when cache is near zero
-        corr =  (1 - momentum**t)
-    
+        corr = (1 - momentum**t)
+        cache['corr'] = corr
+
         x = (x - running_mean / corr) / np.sqrt(running_var / corr + eps)
+        cache['x1'] = x
 
         # Allow network to learn Identity BN when needed
         # gamma and beta are specific for each feature
@@ -265,6 +267,8 @@ def batchnorm_forward(x, gamma, beta, bn_param):
     bn_param['running_var'] = running_var
     bn_param['t'] = t
 
+    cache['corr_running_var'] = cache['running_var'] / cache['corr'] + cache['eps']
+
     return out, cache
 
 
@@ -293,27 +297,37 @@ def batchnorm_backward(dout, cache):
     # might prove to be helpful.                                              #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-    dbeta = dout.sum(axis=0)
+    m = float(cache['x'].shape[0])
 
-    # dgamma = cache['x1'].T @ dout              # N, D
-    # dx1 = dout * cache['gamma']                # N, D
+    dbeta = dout.sum(axis=0)                    # D,
+    dgamma = (cache['x1'] * dout).sum(axis=0)   # D,
+    
+    dx1 = dout * cache['gamma']                 # N, D
 
-    # dx = dx1 * cache['coef_x1']       # N, D (1) x1 = f(x)
-    # drunning_mean1 = (dout * - cache['corr'] / cache['coef_x1']).sum(axis=0) # D, 1 ?
-    # dsample_mean = (1 - cache['momentum']) * drunning_mean1 # D, 1
-    # dx += dsample_mean / cache['x'].shape[0]
+    drunning_var1 = (cache['x'] - cache['running_mean'] / cache['corr']) * -0.5 
+    drunning_var1 *= np.power(cache['running_var'] / cache['corr'] + cache['eps'], -1.5)
+    drunning_var1 *= 1.0 / cache['corr']  
 
-    # drunning_var1 = (cache['x'] - cache['running_mean1'] / cache['corr']) * -0.5 
-    # drunning_var1 *= np.power(cache['running_var1'] / cache['corr'] + cache['eps'], -1.5)
-    # drunning_var1 *= 1/cache['corr']
-    # drunning_var1 = drunning_var1.sum(axis=0) # D, 1 ?
+    drunning_var1 = (dx1 * drunning_var1).sum(axis=0)         # D,
 
+    drunning_mean1 = 1.0 / np.sqrt(cache['running_var'] / cache['corr'] + cache['eps'])
+    drunning_mean1 *= - 1.0 / cache['corr'] 
+
+    drunning_mean1 = (dx1 * drunning_mean1).sum(axis=0)       # D,
+    
+    dsample_var = drunning_var1 * (1.0 - cache['momentum'])   # D,
+
+    dsample_mean = drunning_mean1 * (1.0 - cache['momentum']) # D,
+    dsample_mean += dsample_var / m * (-2.0 * (cache['x'] - cache['sample_mean']).sum(axis=0))
+
+    dx = dx1 / np.sqrt(cache['running_var'] / cache['corr'] + cache['eps']) # N,D
+    dx += dsample_mean / m                              # broadcasted to N,D
+    dx += dsample_var * 2.0 * (cache['x'] - cache['sample_mean']) / m
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
-
     return dx, dgamma, dbeta
 
 
