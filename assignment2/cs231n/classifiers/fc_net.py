@@ -213,6 +213,10 @@ class FullyConnectedNet(object):
             self.params[w_name] = np.random.randn(dim_in, dim_out) * weight_scale
             self.params[b_name] = np.zeros(dim_out)
 
+            if self.normalization=='batchnorm' and i < self.num_layers - 1:
+                self.params[self._param_name('gamma', i + 1)] = np.ones(dim_out)
+                self.params[self._param_name('beta', i + 1)] = np.zeros(dim_out)
+
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -242,9 +246,9 @@ class FullyConnectedNet(object):
         # Cast all parameters to the correct datatype
         for k, v in self.params.items():
             self.params[k] = v.astype(dtype)
-    
+
     def _param_name(self, c, i):
-        return '%c%i'% (c, i)
+        return '%s%i'% (c, i)
 
     def loss(self, X, y=None):
         """
@@ -279,15 +283,32 @@ class FullyConnectedNet(object):
 
         fc_cache = []
         out = X
+        self.layer_outs = []
         for i in range(1, self.num_layers + 1):
             w = self.params[self._param_name('W', i)]
             b = self.params[self._param_name('b', i)]
 
+            layer_params = [out, w, b]
+            layer_forward_fn = None
+
             # Relu for all exept last layer
             if i < self.num_layers:
-                out, cache = affine_relu_forward(out, w, b)
+                if self.normalization=='batchnorm':
+                    gamma = self.params[self._param_name('gamma', i)]
+                    beta = self.params[self._param_name('beta', i)]
+                    layer_params.append(gamma)
+                    layer_params.append(beta)
+                    layer_params.append(self.bn_params[i-1])
+
+                    layer_forward_fn = affine_bn_relu_forward
+                else:
+                    layer_forward_fn = affine_relu_forward
             else:
-                out, cache = affine_forward(out, w, b)
+                layer_forward_fn = affine_forward
+
+            out, cache = layer_forward_fn(*layer_params)
+
+            self.layer_outs.append(out) # plot distributions
 
             fc_cache.append(cache)
 
@@ -330,7 +351,13 @@ class FullyConnectedNet(object):
             if i + 1 == self.num_layers:
                 dx, dw, db = affine_backward(dx, cache)
             else:
-                dx, dw, db = affine_relu_backward(dx, cache)
+                if self.normalization=='batchnorm':
+                    dx, dw, db, dgamma, dbeta = affine_bn_relu_backward(dx, cache)
+                    grads[self._param_name('gamma', i + 1)] = dgamma
+                    grads[self._param_name('beta', i + 1)] = dbeta
+                else:
+                    dx, dw, db = affine_relu_backward(dx, cache)
+
             grads[self._param_name('b', i + 1)] = db
             grads[self._param_name('W', i + 1)] = dw
 
@@ -339,7 +366,7 @@ class FullyConnectedNet(object):
             name = self._param_name('W', i)
             w = self.params[name]
             grads[name] += self.reg * w 
-
+        
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
         #                             END OF YOUR CODE                             #

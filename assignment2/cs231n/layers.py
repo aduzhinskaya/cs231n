@@ -176,7 +176,7 @@ def batchnorm_forward(x, gamma, beta, bn_param):
     mode = bn_param['mode']
     eps = bn_param.get('eps', 1e-5)
     momentum = bn_param.get('momentum', 0.9)
-    t = bn_param.get('t', 1)
+    t = bn_param.get('t', 0)
     # Bias correction for small t when cache is near zero
     coef = (1 - momentum**t)
 
@@ -210,32 +210,32 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+        # import ipdb
+        # ipdb.set_trace()
+        # print('HERE')
+
         # 1. Forward pass
         sample_mean = x.mean(axis=0) # (D,)
         sample_var = x.var(axis=0)   # (D,)
 
         running_mean = momentum * running_mean + (1 - momentum) * sample_mean
         running_var = momentum * running_var + (1 - momentum) * sample_var
-        running_std = np.sqrt(running_var / coef + eps)
 
         # Standertize features in batch
-        x1 = (x - running_mean / coef) / running_std
+        x1 = (x - sample_mean) / np.sqrt(sample_var + eps)
 
         # Allow network to learn Identity BN when needed
         # gamma and beta are specific for each feature
         out = (x1 * gamma) + beta
 
-
         # 2. Save intermediates to cache 
-        cache['x'] = x
-        cache['momentum'] = momentum
         cache['eps'] = eps
         cache['gamma'] = gamma
         cache['beta'] = beta
-        cache['t'] = t
-        cache['zero_batch_mean'] = x - sample_mean
-        cache['running_mean'] = running_mean
-        cache['running_std'] = running_std
+
+        cache['x'] = x
+        cache['bn_mean'] = sample_mean
+        cache['bn_std'] = np.sqrt(sample_var + eps)
 
         t += 1
 
@@ -298,33 +298,31 @@ def batchnorm_backward(dout, cache):
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
     N = float(cache['x'].shape[0])
-    coef = (1 - cache['momentum']**cache['t'])
-    x1 = (cache['x'] - cache['running_mean'] / coef) / cache['running_std']
 
+    zero_centered_x = cache['x'] - cache['bn_mean']
+    
 
     # Backward pass of gradients
     # notation: dsomething = dL/dsomething
-    dbeta = dout.sum(axis=0)                    # D,
+    #           lsomething = df/dsomething (local grad)
+    dbeta = dout.sum(axis=0)                    # D, - shape
 
+    x1 = zero_centered_x / cache['bn_std']
     dgamma = (x1 * dout).sum(axis=0)            # D,
     
     dx1 = dout * cache['gamma']                 # N, D
 
-    loc_running_var1 = (cache['x'] - cache['running_mean'] / coef) * -0.5 
-    loc_running_var1 /= (coef * cache['running_std']**3)
-    drunning_var = (dx1 * loc_running_var1).sum(axis=0)         # D,
+    lsample_var = zero_centered_x * -0.5 / cache['bn_std']**3   
+    dsample_var = (dx1 * lsample_var).sum(axis=0)         # D,
 
-    loc_running_mean1 = -1.0 / (coef * cache['running_std'])
-    drunning_mean = (dx1 * loc_running_mean1).sum(axis=0)       # D,
+    lsample_mean = -1.0 / cache['bn_std']
+    dsample_mean = (dx1 * lsample_mean).sum(axis=0)          # D,
     
-    dsample_var = drunning_var * (1.0 - cache['momentum'])      # D,
+    dsample_mean += dsample_var / N * -2.0 * (zero_centered_x).sum(axis=0)
 
-    dsample_mean = drunning_mean * (1.0 - cache['momentum'])    # D,
-    dsample_mean += dsample_var / N * -2.0 * (cache['zero_batch_mean']).sum(axis=0)
-
-    dx = dx1 / cache['running_std']                         # N,D
-    dx += dsample_mean / N                                  # broadcasted to N,D
-    dx += dsample_var * 2.0 * cache['zero_batch_mean'] / N  # N,D
+    dx = dx1 / cache['bn_std']                     # N,D
+    dx += dsample_mean / N                         # broadcasted to N,D
+    dx += dsample_var * 2.0 * zero_centered_x / N  # N,D
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
