@@ -176,9 +176,6 @@ def batchnorm_forward(x, gamma, beta, bn_param):
     mode = bn_param['mode']
     eps = bn_param.get('eps', 1e-5)
     momentum = bn_param.get('momentum', 0.9)
-    t = bn_param.get('t', 0)
-    # Bias correction for small t when cache is near zero
-    coef = (1 - momentum**t)
 
     N, D = x.shape
     running_mean = bn_param.get('running_mean', np.zeros(D, dtype=x.dtype))
@@ -210,10 +207,6 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        # import ipdb
-        # ipdb.set_trace()
-        # print('HERE')
-
         # 1. Forward pass
         sample_mean = x.mean(axis=0) # (D,)
         sample_var = x.var(axis=0)   # (D,)
@@ -237,8 +230,6 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         cache['bn_mean'] = sample_mean
         cache['bn_std'] = np.sqrt(sample_var + eps)
 
-        t += 1
-
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         #######################################################################
         #                           END OF YOUR CODE                          #
@@ -252,7 +243,7 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        x = (x - running_mean / coef) / np.sqrt(running_var / coef + eps)
+        x = (x - running_mean) / np.sqrt(running_var + eps)
 
         out = x * gamma + beta
 
@@ -266,7 +257,6 @@ def batchnorm_forward(x, gamma, beta, bn_param):
     # Store the updated running means back into bn_param
     bn_param['running_mean'] = running_mean
     bn_param['running_var'] = running_var
-    bn_param['t'] = t
 
     return out, cache
 
@@ -388,7 +378,7 @@ def layernorm_forward(x, gamma, beta, ln_param):
     - out: of shape (N, D)
     - cache: A tuple of values needed in the backward pass
     """
-    out, cache = None, None
+    out, cache = None, {}
     eps = ln_param.get('eps', 1e-5)
     ###########################################################################
     # TODO: Implement the training-time forward pass for layer norm.          #
@@ -402,7 +392,24 @@ def layernorm_forward(x, gamma, beta, ln_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    # 1. Forward pass
+    sample_mean = x.T.mean(axis=0) # (N,)
+    sample_var = x.T.var(axis=0)   # (N,)
+
+    # Standertize features in batch
+    x1 = (x.T - sample_mean) / np.sqrt(sample_var + eps)
+
+    # Allow network to learn Identity BN when needed
+    # gamma and beta are specific for each feature
+    out = (x1.T * gamma) + beta
+
+    cache['eps'] = eps
+    cache['gamma'] = gamma
+    cache['beta'] = beta
+
+    cache['x'] = x
+    cache['bn_mean'] = sample_mean
+    cache['bn_std'] = np.sqrt(sample_var + eps)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -437,7 +444,33 @@ def layernorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N = float(cache['x'].T.shape[0])
+
+    zero_centered_x = cache['x'].T - cache['bn_mean'] # D, N
+    
+
+    # Backward pass of gradients
+    # notation: dsomething = dL/dsomething
+    #           lsomething = df/dsomething (local grad)
+    dbeta = dout.sum(axis=0)                    # D, - shape
+
+    x1 = zero_centered_x / cache['bn_std']
+    dgamma = (x1.T * dout).sum(axis=0)          # D,
+    
+    dx1 = (dout * cache['gamma']).T             # D, N
+
+    lsample_var = zero_centered_x * -0.5 / cache['bn_std']**3   
+    dsample_var = (dx1 * lsample_var).sum(axis=0)         # D,
+
+    lsample_mean = -1.0 / cache['bn_std']
+    dsample_mean = (dx1 * lsample_mean).sum(axis=0)          # D,
+    dsample_mean += dsample_var / N * -2.0 * (zero_centered_x).sum(axis=0)
+
+    dx = dx1 / cache['bn_std']                     # D, N
+    dx += dsample_mean / N                         # 
+    dx += dsample_var * 2.0 * zero_centered_x / N  # 
+
+    dx = dx.T                                      # N, D
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################

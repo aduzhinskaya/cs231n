@@ -213,7 +213,7 @@ class FullyConnectedNet(object):
             self.params[w_name] = np.random.randn(dim_in, dim_out) * weight_scale
             self.params[b_name] = np.zeros(dim_out)
 
-            if self.normalization=='batchnorm' and i < self.num_layers - 1:
+            if self.normalization is not None and i < self.num_layers - 1:
                 self.params[self._param_name('gamma', i + 1)] = np.ones(dim_out)
                 self.params[self._param_name('beta', i + 1)] = np.zeros(dim_out)
 
@@ -293,14 +293,14 @@ class FullyConnectedNet(object):
 
             # Relu for all exept last layer
             if i < self.num_layers:
-                if self.normalization=='batchnorm':
+                if self.normalization is not None:
                     gamma = self.params[self._param_name('gamma', i)]
                     beta = self.params[self._param_name('beta', i)]
                     layer_params.append(gamma)
                     layer_params.append(beta)
                     layer_params.append(self.bn_params[i-1])
 
-                    layer_forward_fn = affine_bn_relu_forward
+                    layer_forward_fn = self.__affine_norm_relu_forward
                 else:
                     layer_forward_fn = affine_relu_forward
             else:
@@ -351,8 +351,8 @@ class FullyConnectedNet(object):
             if i + 1 == self.num_layers:
                 dx, dw, db = affine_backward(dx, cache)
             else:
-                if self.normalization=='batchnorm':
-                    dx, dw, db, dgamma, dbeta = affine_bn_relu_backward(dx, cache)
+                if self.normalization is not None:
+                    dx, dw, db, dgamma, dbeta = self.__affine_norm_relu_backward(dx, cache)
                     grads[self._param_name('gamma', i + 1)] = dgamma
                     grads[self._param_name('beta', i + 1)] = dbeta
                 else:
@@ -373,3 +373,30 @@ class FullyConnectedNet(object):
         ############################################################################
 
         return loss, grads
+    
+
+    def __affine_norm_relu_forward(self, x, w, b, gamma, beta, bn_params):
+        fn = {
+            "batchnorm": batchnorm_forward,
+            "layernorm": layernorm_forward
+        }
+
+        a, fc_cache = affine_forward(x, w, b)
+        a_norm, norm_cache = fn[self.normalization](a, gamma, beta, bn_params)
+        out, relu_cache = relu_forward(a_norm)
+        cache = (fc_cache, norm_cache, relu_cache)
+        return out, cache
+
+
+    def __affine_norm_relu_backward(self, dout, cache):
+        fc_cache, norm_cache, relu_cache = cache
+        fn = {
+            "batchnorm": batchnorm_backward,
+            "layernorm": layernorm_backward
+        }
+
+        da = relu_backward(dout, relu_cache)
+        da_batch, dgamma, dbeta = fn[self.normalization](da, norm_cache)
+        dx, dw, db = affine_backward(da_batch, fc_cache)
+
+        return dx, dw, db, dgamma, dbeta
