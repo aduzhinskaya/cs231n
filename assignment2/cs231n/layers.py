@@ -603,13 +603,38 @@ def conv_forward_naive(x, w, b, conv_param):
     - cache: (x, w, b, conv_param)
     """
     out = None
+    pad = conv_param['pad']
+    stride = conv_param['stride']
     ###########################################################################
     # TODO: Implement the convolutional forward pass.                         #
     # Hint: you can use the function np.pad for padding.                      #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, C, H, W = x.shape
+    F, C, HH, WW = w.shape 
+    H_new = int(1 + (H + 2 * pad - HH) / stride)
+    W_new = int(1 + (W + 2 * pad - WW) / stride)
+
+    pad_width_NCHW = ((0, 0), (0, 0), (pad, pad), (pad, pad))
+
+    padded_x = np.pad(x, pad_width_NCHW, 'constant')
+
+    out = np.zeros((N, F, H_new, W_new))
+
+    for n in range(N):                  # N samples
+        for f in range(F):              # F times
+            # Stride through X
+            for outi in range(H_new):     
+                for outj in range(W_new):
+                    xi = outi * stride
+                    xj = outj * stride
+                    for ki in range(HH):  # convolve volume (HH, WW, C) in X and kernel
+                        for kj in range(WW):
+                            for kz in range(C):
+                                out[n][f][outi][outj] += padded_x[n][kz][xi+ki][xj+kj] * w[f][kz][ki][kj]
+            # Add filter bias
+            out[n][f] += b[f]             
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
