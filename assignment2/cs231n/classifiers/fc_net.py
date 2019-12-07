@@ -281,9 +281,8 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        fc_cache = []
+        fc_cache, dropout_cache = [], []
         out = X
-        self.layer_outs = []
         for i in range(1, self.num_layers + 1):
             w = self.params[self._param_name('W', i)]
             b = self.params[self._param_name('b', i)]
@@ -308,9 +307,11 @@ class FullyConnectedNet(object):
 
             out, cache = layer_forward_fn(*layer_params)
 
-            self.layer_outs.append(out) # plot distributions
-
             fc_cache.append(cache)
+
+            if self.use_dropout and i < self.num_layers:
+                out, cache = dropout_forward(out, self.dropout_param)
+                dropout_cache.append(cache)
 
         scores = out
 
@@ -351,6 +352,8 @@ class FullyConnectedNet(object):
             if i + 1 == self.num_layers:
                 dx, dw, db = affine_backward(dx, cache)
             else:
+                if self.use_dropout:
+                    dx = dropout_backward(dx, dropout_cache[i])
                 if self.normalization is not None:
                     dx, dw, db, dgamma, dbeta = self.__affine_norm_relu_backward(dx, cache)
                     grads[self._param_name('gamma', i + 1)] = dgamma
@@ -373,7 +376,7 @@ class FullyConnectedNet(object):
         ############################################################################
 
         return loss, grads
-    
+                
 
     def __affine_norm_relu_forward(self, x, w, b, gamma, beta, bn_params):
         fn = {

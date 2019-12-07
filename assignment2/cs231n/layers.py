@@ -519,7 +519,8 @@ def dropout_forward(x, dropout_param):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        mask = np.random.binomial(size=x.shape, n=1, p=p)
+        out = x * mask * 1/(p + 1e-5)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         #######################################################################
@@ -531,14 +532,14 @@ def dropout_forward(x, dropout_param):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        out = x
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         #######################################################################
         #                            END OF YOUR CODE                         #
         #######################################################################
 
-    cache = (dropout_param, mask)
+    cache = (dropout_param, mask, p)
     out = out.astype(x.dtype, copy=False)
 
     return out, cache
@@ -552,7 +553,7 @@ def dropout_backward(dout, cache):
     - dout: Upstream derivatives, of any shape
     - cache: (dropout_param, mask) from dropout_forward.
     """
-    dropout_param, mask = cache
+    dropout_param, mask, p = cache
     mode = dropout_param['mode']
 
     dx = None
@@ -562,7 +563,7 @@ def dropout_backward(dout, cache):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        dx = dout * mask * 1/(p+ 1e-5)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         #######################################################################
