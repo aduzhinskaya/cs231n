@@ -663,7 +663,38 @@ def conv_backward_naive(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    x, w, b, conv_param = cache
+    pad = conv_param['pad']
+    stride = conv_param['stride']
+
+    pad_width_NCHW = ((0, 0), (0, 0), (pad, pad), (pad, pad))
+    padded_x = np.pad(x, pad_width_NCHW, 'constant')
+
+    N, F, H_new, W_new = dout.shape
+    F, C, HH, WW = w.shape 
+
+    db = np.zeros_like(b)
+    dx = np.zeros_like(x)
+    dpadded_x = np.zeros_like(padded_x)
+    dw = np.zeros_like(w)
+
+    for n in range(N):                  # N samples
+        for f in range(F):              # F times
+            # Stride through X
+            for outi in range(H_new):     
+                for outj in range(W_new):
+                    xi = outi * stride
+                    xj = outj * stride
+                    for ki in range(HH):  # convolve volume (HH, WW, C) in X and kernel
+                        for kj in range(WW):
+                            for kz in range(C):
+                                dw[f][kz][ki][kj] += dout[n][f][outi][outj] * padded_x[n][kz][xi+ki][xj+kj]
+                                dpadded_x[n][kz][xi+ki][xj+kj] += dout[n][f][outi][outj] * w[f][kz][ki][kj]
+            # Add filter bias
+            db[f] += np.sum(dout[n][f]) 
+    
+    # crop dx from padded 
+    dx = dpadded_x[:, :, pad:-pad, pad:-pad]
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
