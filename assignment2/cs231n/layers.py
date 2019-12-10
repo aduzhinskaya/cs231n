@@ -728,7 +728,29 @@ def max_pool_forward_naive(x, pool_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, C, H, W = x.shape
+    HH, WW = pool_param['pool_height'], pool_param['pool_width']
+    stride = pool_param['stride']
+    pad = 0
+
+    H_new = int(1 + (H + 2 * pad - HH) / stride)
+    W_new = int(1 + (W + 2 * pad - WW) / stride)
+
+    out = np.zeros((N, C, H_new, W_new))
+
+    for n in range(N): 
+        for c in range(C):
+            # Stride through X
+            for outi in range(H_new):     
+                for outj in range(W_new):
+                    xi = outi * stride
+                    xj = outj * stride
+
+                    elem, _ = _max_in_kernel(
+                        x=x[n][c], 
+                        bbox=(xi, xj, HH, WW))
+
+                    out[n][c][outi][outj] = elem
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -738,24 +760,61 @@ def max_pool_forward_naive(x, pool_param):
     return out, cache
 
 
+def _max_in_kernel(x, bbox):
+    i, j, h, w = bbox
+
+    max_elem = x[i][j]
+    max_i, max_j = i, j
+    for ki in range(i, i + h):  
+        for kj in range(j, j + w):
+            if max_elem < x[ki][kj]:
+                max_elem = x[ki][kj]
+                max_i, max_j = ki, kj
+
+    return max_elem, (max_i, max_j)
+
+
 def max_pool_backward_naive(dout, cache):
     """
     A naive implementation of the backward pass for a max-pooling layer.
 
     Inputs:
-    - dout: Upstream derivatives
+    - dout: Upstream derivatives (N, C, H', W')
     - cache: A tuple of (x, pool_param) as in the forward pass.
 
     Returns:
     - dx: Gradient with respect to x
     """
     dx = None
+    x, pool_param = cache
     ###########################################################################
     # TODO: Implement the max-pooling backward pass                           #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, C, H, W = x.shape
+    HH, WW = pool_param['pool_height'], pool_param['pool_width']
+    stride = pool_param['stride']
+    pad = 0
+
+    H_new = int(1 + (H + 2 * pad - HH) / stride)
+    W_new = int(1 + (W + 2 * pad - WW) / stride)
+
+    dx = np.zeros_like(x)
+
+    for n in range(N): 
+        for c in range(C):
+            # Stride through X
+            for outi in range(H_new):     
+                for outj in range(W_new):
+                    xi = outi * stride
+                    xj = outj * stride
+
+                    _, (i, j) = _max_in_kernel(
+                        x=x[n][c], 
+                        bbox=(xi, xj, HH, WW))
+
+                    dx[n][c][i][j] = dout[n][c][outi][outj]
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
