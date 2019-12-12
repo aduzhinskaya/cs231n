@@ -139,9 +139,9 @@ class Solver(object):
         self.verbose = kwargs.pop('verbose', True)
 
         self.tb_writer = None
-        tb_label = kwargs.pop('tensorboard_logdir', None)
-        if tb_label:
-            log_dir = os.path.join('logs/tensorboard/', tb_label)
+        log_dir = kwargs.pop('tensorboard_logdir', None)
+        if log_dir:
+            # log_dir = os.path.join('logs/tensorboard/', tb_label)
             self.tb_writer = summary.create_file_writer(log_dir)
 
         # Throw an error if there are extra keyword arguments

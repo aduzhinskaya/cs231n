@@ -54,8 +54,19 @@ class ThreeLayerConvNet(object):
         # the start of the loss() function to see how that happens.                #                           
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        C, H, W = input_dim
 
-        pass
+        # conv weights
+        self.params['W1'] = np.random.randn(num_filters, C, filter_size, filter_size) * weight_scale
+        self.params['b1'] = np.zeros(num_filters)
+
+        # fc weights
+        self.params['W2'] = np.random.randn(H//2 * W//2 * num_filters, hidden_dim) * weight_scale
+        self.params['b2'] = np.zeros(hidden_dim)
+
+        # last fc
+        self.params['W3'] = np.random.randn(hidden_dim, num_classes) * weight_scale
+        self.params['b3'] = np.zeros(num_classes)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -95,7 +106,27 @@ class ThreeLayerConvNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        X = X.astype(self.dtype)
+        cache_stack = []
+        # import pdb
+        # pdb.set_trace()
+
+        # conv - ReLU - maxpool
+        pooled_out, pooled_cache = conv_relu_pool_forward(
+            X, W1, b1, 
+            conv_param, pool_param)          
+        cache_stack.append(pooled_cache)
+        
+        # N, F, H/2, W/2
+        # assert pooled_out.shape == (X.shape[0], W1.shape[0], X.shape[2]/2, X.shape[3]/2)
+        
+        # affine - ReLU        
+        hidden_out, hidden_cache = affine_relu_forward(pooled_out, W2, b2)
+        cache_stack.append(hidden_cache)
+
+        # affine
+        scores, cache = affine_forward(hidden_out, W3, b3)
+        cache_stack.append(cache)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -118,7 +149,27 @@ class ThreeLayerConvNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        loss, dx = softmax_loss(scores, y)
+
+        # L2 regularization
+        l2_penalty = 0
+
+        weight_params = [param for param in self.params if param.startswith('W')]
+        for weight_name in weight_params:
+            l2_penalty += np.linalg.norm(self.params[weight_name]) ** 2
+
+        loss += 0.5 * self.reg * l2_penalty
+
+
+        # Backprop
+        dx, grads['W3'], grads['b3'] = affine_backward(dx, cache_stack.pop())
+        dx, grads['W2'], grads['b2'] = affine_relu_backward(dx, cache_stack.pop())
+        dx, grads['W1'], grads['b1'] = conv_relu_pool_backward(dx, cache_stack.pop())
+
+        # set dloss_dw from L2 penalty pass
+        for weight_name in weight_params:
+            grads[weight_name] += self.reg * self.params[weight_name] 
+
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################

@@ -855,8 +855,15 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
     # Your implementation should be very short; ours is less than five lines. #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    N, F, H, W = x.shape
 
-    pass
+    featuremaps = np.transpose(x, (0, 2, 3, 1))   # N, H, W, F
+    flatten_featuremaps = featuremaps.reshape((-1, F))     # -> N*H*W, F
+    
+    bn_out, cache = batchnorm_forward(flatten_featuremaps, gamma, beta, bn_param)
+
+    flatten_out = bn_out.reshape((N, H, W, F))  
+    out = np.transpose(flatten_out, (0, 3, 1, 2)) # N, F, H, W (done)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -890,7 +897,16 @@ def spatial_batchnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+
+    # Cast to batchnorm input shape
+    # (N, C, H, W) -> (N * H * W, C) <-> batchnorm(N, D)
+    N, F, H, W = dout.shape
+    dout = dout.transpose((0, 2, 3, 1)).reshape((-1, F))    
+    
+    dx, dgamma, dbeta = batchnorm_backward(dout, cache)
+
+    # Revert to spatial batchnorm expected shape
+    dx = dx.reshape((N, H, W, F)).transpose((0, 3, 1, 2))
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -919,7 +935,7 @@ def spatial_groupnorm_forward(x, gamma, beta, G, gn_param):
     - out: Output data, of shape (N, C, H, W)
     - cache: Values needed for the backward pass
     """
-    out, cache = None, None
+    out, cache = None, {}
     eps = gn_param.get('eps',1e-5)
     ###########################################################################
     # TODO: Implement the forward pass for spatial group normalization.       #
@@ -929,8 +945,28 @@ def spatial_groupnorm_forward(x, gamma, beta, G, gn_param):
     # and layer normalization!                                                # 
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+   
+    N, C, H, W = x.shape
+    x_grouped = x.reshape(N * G, C//G * H * W)
 
-    pass
+    # 1. Forward pass
+    sample_mean = x_grouped.T.mean(axis=0) # (N,)
+    sample_var = x_grouped.T.var(axis=0)   # (N,)
+
+    # Standertize features in group
+    x1 = (x_grouped.T - sample_mean) / np.sqrt(sample_var + eps)
+
+    out = (x1.T.reshape(N, C, H, W) * gamma) + beta
+
+    cache['eps'] = eps
+    cache['gamma'] = gamma
+    cache['G'] = G
+    cache['beta'] = beta
+
+    cache['x'] = x
+    cache['x_grouped'] = x_grouped.T
+    cache['bn_mean'] = sample_mean
+    cache['bn_std'] = np.sqrt(sample_var + eps)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -960,7 +996,35 @@ def spatial_groupnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, C, H, W  = cache['x'].shape
+    G = cache['G']
+
+    zero_centered_x = cache['x_grouped'] - cache['bn_mean'] # D, N
+    x1 = zero_centered_x / cache['bn_std'] 
+
+    # Backward pass of gradients
+    # notation: dsomething = dL/dsomething
+    #           lsomething = df/dsomething (local grad)
+    dbeta = dout.sum(axis=(0, 2, 3), keepdims=True)          # 1, C, 1, 1 - shape
+
+    dgamma = (x1.T.reshape(N, C, H, W) * dout).sum(axis=(0, 2, 3), keepdims=True)  # 1, C, 1, 1 - shape
+
+    dx1 = (dout * cache['gamma']).reshape(N*G, C//G*H*W).T      # (C//G*H*W, N*G) 
+
+    lsample_var = zero_centered_x * -0.5 / cache['bn_std']**3   
+    dsample_var = (dx1 * lsample_var).sum(axis=0)                # ()
+
+    N_prime = zero_centered_x.shape[0]
+
+    lsample_mean = -1.0 / cache['bn_std']
+    dsample_mean = (dx1 * lsample_mean).sum(axis=0)          # D,
+    dsample_mean += dsample_var / N_prime * -2.0 * (zero_centered_x).sum(axis=0)
+
+    dx = dx1 / cache['bn_std']                     # D, N
+    dx += dsample_mean / N_prime                         # 
+    dx += dsample_var * 2.0 * zero_centered_x / N_prime # 
+
+    dx = dx.T.reshape(N, C, H, W)                                     # N, D
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
