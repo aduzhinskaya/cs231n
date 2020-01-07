@@ -68,8 +68,10 @@ def image_from_url(url):
         return img
     except urllib.error.URLError as e:
         print('URL Error: ', e.reason, url)
+        return None
     except urllib.error.HTTPError as e:
         print('HTTP Error: ', e.code, url)
+        return None
 
 
 def load_image(filename, size=None):

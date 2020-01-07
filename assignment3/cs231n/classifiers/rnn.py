@@ -96,8 +96,8 @@ class CaptioningRNN(object):
         # by one relative to each other because the RNN should produce word (t+1)
         # after receiving word t. The first element of captions_in will be the START
         # token, and the first element of captions_out will be the first word.
-        captions_in = captions[:, :-1]
-        captions_out = captions[:, 1:]
+        captions_in = captions[:, :-1]  # <START/>      <first_word>     ..
+        captions_out = captions[:, 1:]  # first_word      ..            <END/>
 
         # You'll need this
         mask = (captions_out != self._null)
@@ -142,7 +142,37 @@ class CaptioningRNN(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+
+        # (1) image features to hidden
+        h0, cache_proj = affine_forward(features, W_proj, b_proj)  # (N, H)
+
+        # (2) text to embedded_text
+        embed_in, cache_embed_in = word_embedding_forward(captions_in, W_embed)  # (N, T, W)
+        
+        # (3) RNN: x = embedded_text, h0 = image_features
+        h_out, cache_rnn = rnn_forward(embed_in, h0, Wx, Wh, b)  #(N, T, H)
+
+        # (4) RNN output to vocab unnormalized log prob
+        vocab_scores, cache_scores = temporal_affine_forward(h_out, W_vocab, b_vocab)  # (N, T, V)
+
+        # (5) Softmax loss
+        loss, d_scores = temporal_softmax_loss(
+                            x = vocab_scores, 
+                            y = captions_out, 
+                            mask = mask)
+        
+
+        # Backward pass:
+        dh_out, *dother = temporal_affine_backward(d_scores, cache_scores)
+        grads['W_vocab'], grads['b_vocab'] = dother
+
+        dembed_in, dh0, *dother = rnn_backward(dh_out, cache_rnn)
+        grads['Wx'], grads['Wh'], grads['b'] = dother
+
+        grads['W_embed'] = word_embedding_backward(dembed_in, cache_embed_in)
+
+        dx, grads['W_proj'], grads['b_proj'] = affine_backward(dh0, cache_proj)        
+
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -211,7 +241,30 @@ class CaptioningRNN(object):
         ###########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+
+        # (1) image features to hidden
+        h0, _ = affine_forward(features, W_proj, b_proj)
+
+        word = np.zeros((N, 1), dtype=np.int32)
+        word.fill(self._start)
+
+        prev_h = h0
+        for t in range(max_length):
+            # (2) a word in embedded space
+            wordvec, _ = word_embedding_forward(word, W_embed)  
+        
+            # (3) RNN: x = embedded_text, h0 = image_features
+            rnn_out, _ = rnn_step_forward(wordvec.squeeze(), prev_h, Wx, Wh, b)
+            prev_h = rnn_out
+
+            # (4) RNN output to vocab unnormalized log prob
+            vocab_scores, _ = affine_forward(rnn_out, W_vocab, b_vocab)
+
+            probs = np.exp(vocab_scores - np.max(vocab_scores, axis=1, keepdims=True))
+            probs /= np.sum(probs, axis=1, keepdims=True)
+            word[:,0] = np.argmax(probs, axis=1)
+            
+            captions[:,t] = word[:,0]
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
