@@ -70,6 +70,18 @@ class CaptioningRNN(object):
         self.params['W_vocab'] /= np.sqrt(hidden_dim)
         self.params['b_vocab'] = np.zeros(vocab_size)
 
+        rnn_forward_map = {
+            'rnn': rnn_forward,
+            'lstm': lstm_forward
+        }
+        rnn_backward_map = {
+            'rnn': rnn_backward,
+            'lstm': lstm_backward
+        }
+
+        self.rnn_forward_fn = rnn_forward_map[cell_type]
+        self.rnn_backward_fn = rnn_backward_map[cell_type]
+
         # Cast parameters to correct dtype
         for k, v in self.params.items():
             self.params[k] = v.astype(self.dtype)
@@ -142,7 +154,6 @@ class CaptioningRNN(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-
         # (1) image features to hidden
         h0, cache_proj = affine_forward(features, W_proj, b_proj)  # (N, H)
 
@@ -150,7 +161,7 @@ class CaptioningRNN(object):
         embed_in, cache_embed_in = word_embedding_forward(captions_in, W_embed)  # (N, T, W)
         
         # (3) RNN: x = embedded_text, h0 = image_features
-        h_out, cache_rnn = rnn_forward(embed_in, h0, Wx, Wh, b)  #(N, T, H)
+        h_out, cache_rnn = self.rnn_forward_fn(embed_in, h0, Wx, Wh, b)  #(N, T, H)
 
         # (4) RNN output to vocab unnormalized log prob
         vocab_scores, cache_scores = temporal_affine_forward(h_out, W_vocab, b_vocab)  # (N, T, V)
@@ -161,18 +172,23 @@ class CaptioningRNN(object):
                             y = captions_out, 
                             mask = mask)
         
-
         # Backward pass:
-        dh_out, *dother = temporal_affine_backward(d_scores, cache_scores)
-        grads['W_vocab'], grads['b_vocab'] = dother
+        dh_out, dW_vocab, db_vocab = temporal_affine_backward(d_scores, cache_scores)
+        dembed_in, dh0, dWx, dWh, db = self.rnn_backward_fn(dh_out, cache_rnn)
+        dW_embed = word_embedding_backward(dembed_in, cache_embed_in)
+        dx, dW_proj, db_proj = affine_backward(dh0, cache_proj) 
 
-        dembed_in, dh0, *dother = rnn_backward(dh_out, cache_rnn)
-        grads['Wx'], grads['Wh'], grads['b'] = dother
-
-        grads['W_embed'] = word_embedding_backward(dembed_in, cache_embed_in)
-
-        dx, grads['W_proj'], grads['b_proj'] = affine_backward(dh0, cache_proj)        
-
+        # Save to dict
+        grads = {
+            'W_vocab': dW_vocab, 
+            'b_vocab': db_vocab,
+            'Wx': dWx, 
+            'Wh': dWh,
+            'b': db,
+            'W_embed': dW_embed, 
+            'W_proj': dW_proj,
+            'b_proj': db_proj
+        }
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -249,12 +265,16 @@ class CaptioningRNN(object):
         word.fill(self._start)
 
         prev_h = h0
+        prev_c = np.zeros_like(h0)
         for t in range(max_length):
             # (2) a word in embedded space
             wordvec, _ = word_embedding_forward(word, W_embed)  
         
             # (3) RNN: x = embedded_text, h0 = image_features
-            rnn_out, _ = rnn_step_forward(wordvec.squeeze(), prev_h, Wx, Wh, b)
+            if self.cell_type == 'rnn':
+                rnn_out, _ = rnn_step_forward(wordvec.squeeze(), prev_h, Wx, Wh, b)
+            else:
+                rnn_out, prev_c, _ = lstm_step_forward(wordvec.squeeze(), prev_h, prev_c, Wx, Wh, b)
             prev_h = rnn_out
 
             # (4) RNN output to vocab unnormalized log prob

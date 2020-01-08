@@ -115,12 +115,11 @@ def rnn_forward(x, h0, Wx, Wh, b):
     # above. You can use a for loop to help compute the forward pass.            #
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-    N, T, D = x.shape
-    N, H = h0.shape
+    N, T, D, H = *x.shape, h0.shape[1] 
 
     h = np.zeros((N, T, H))
     cache = {}
-    cache['D'] = D
+    cache['dims'] = (N, T, D, H)
     cache['steps'] = []
 
     prev_h = h0
@@ -164,8 +163,7 @@ def rnn_backward(dh, cache):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    N, T, H = dh.shape
-    D = cache['D']
+    N, T, D, H = cache['dims']
     dx = np.zeros((N, T, D))
     dWx = np.zeros((D, H))
     dWh = np.zeros((H, H))
@@ -303,12 +301,21 @@ def lstm_step_forward(x, prev_h, prev_c, Wx, Wh, b):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    ifog = x.dot(Wx) + prev_h.dot(Wh) + b   #(N, 4H)
+    i, f, o, g = np.hsplit(ifog, 4)
+    i = sigmoid(i)
+    f = sigmoid(f)
+    o = sigmoid(o)
+    g = np.tanh(g)
+    next_c = f * prev_c + i * g
+    next_h = o * np.tanh(next_c)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
+
+    cache = (i, f, o, g, x, prev_h, prev_c, Wx, Wh, b, next_c)
 
     return next_h, next_c, cache
 
@@ -331,6 +338,8 @@ def lstm_step_backward(dnext_h, dnext_c, cache):
     - db: Gradient of biases, of shape (4H,)
     """
     dx, dprev_h, dprev_c, dWx, dWh, db = None, None, None, None, None, None
+
+    i, f, o, g, x, prev_h, prev_c, Wx, Wh, b, next_c = cache
     #############################################################################
     # TODO: Implement the backward pass for a single timestep of an LSTM.       #
     #                                                                           #
@@ -339,7 +348,23 @@ def lstm_step_backward(dnext_h, dnext_c, cache):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    dnext_c += dnext_h * o * (1 - np.tanh(next_c) ** 2)
+    dprev_c = dnext_c * f
+    do = dnext_h * np.tanh(next_c)
+    df = dnext_c * prev_c
+    di = dnext_c * g
+    dg = dnext_c * i
+    dg = dg * (1 - g ** 2)  # g = tanh(g)
+    di = di * (i * (1 - i)) # i = ...
+    do = do * (o * (1 - o)) # ...
+    df = df * (f * (1 - f))
+    difog = np.hstack([di, df, do, dg]) #(N, 4H)
+    dx = difog.dot(Wx.T)
+    dWx = x.T.dot(difog)
+    dprev_h = difog.dot(Wh.T)
+    dWh = prev_h.T.dot(difog)
+    db = difog.sum(axis = 0)
+
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -378,7 +403,23 @@ def lstm_forward(x, h0, Wx, Wh, b):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, T, D, H = *x.shape, h0.shape[1] 
+
+    h = np.zeros((N, T, H))
+
+    cache = dict()
+    cache['dims'] = (N, T, D, H)
+    cache['steps'] = []
+
+    # initial hidden and cell states
+    prev_h = h0
+    prev_c = np.zeros((N, H))
+
+    for t in range(T):
+        x_t = x.take(indices=t, axis=1)
+        prev_h, prev_c, cache_t = lstm_step_forward(x_t, prev_h, prev_c, Wx, Wh, b)
+        h[:, t, :] = prev_h
+        cache['steps'].append(cache_t)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -410,7 +451,27 @@ def lstm_backward(dh, cache):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, T, D, H = cache['dims']
+    dx = np.zeros((N, T, D))
+    dWx = np.zeros((D, 4*H))
+    dWh = np.zeros((H, 4*H))
+    db = np.zeros((4*H,))
+    dprev_h = np.zeros((N, H))
+    dprev_c = np.zeros((N, H))
+
+    for t in reversed(range(T)):
+        dprev_h += dh.take(indices = t, axis = 1)
+        
+        packed = lstm_step_backward(dprev_h, dprev_c, cache['steps'].pop())
+        dx_t, dprev_h, dprev_c, dWx_t, dWh_t, db_t = packed
+
+        dx[:, t, :] = dx_t
+
+        dWx += dWx_t
+        dWh += dWh_t
+        db += db_t
+
+    dh0 = dprev_h
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
