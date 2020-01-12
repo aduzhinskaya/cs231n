@@ -252,11 +252,15 @@ def load_imagenet_val(num=None):
       print('cd cs231n/datasets')
       print('bash get_imagenet_val.sh')
       assert False, 'Need to download imagenet_val_25.npz'
-    f = np.load(imagenet_fn)
+
+    # modify the default parameters of np.load
+    np_load = lambda *a,**k: np.load(*a, allow_pickle=True, **k)
+    f = np_load(imagenet_fn)
     X = f['X']
     y = f['y']
     class_names = f['label_map'].item()
     if num is not None:
         X = X[:num]
         y = y[:num]
+    
     return X, y, class_names
